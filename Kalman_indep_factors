@@ -1,0 +1,389 @@
+# This program is sourced by
+# source(file="C:\\Projekt\\Nelson_Siegel_analysis\\JoE_analysis\\Test_code\\Kalman_filter_AFNS_indep_factors.r")
+
+
+
+analytical.yield.adjustment.term<-function(sigma11=0.005,sigma12=0,sigma13=0,sigma21=-0.001,sigma22=0.003,sigma23=0,sigma31=-0.1,sigma32=0.001,sigma33=0.007,lambda=0.6,time=1)
+{
+ Atilde<-sigma11^2+sigma12^2+sigma13^2
+
+ Btilde<-sigma21^2+sigma22^2+sigma23^2
+
+ Ctilde<-sigma31^2+sigma32^2+sigma33^2
+
+ Dtilde<-sigma11*sigma21+sigma12*sigma22+sigma13*sigma23
+
+ Etilde<-sigma11*sigma31+sigma12*sigma32+sigma13*sigma33
+
+ Ftilde<-sigma21*sigma31+sigma22*sigma32+sigma23*sigma33
+
+ res1<--Atilde*time^2/6
+
+ res2<--Btilde*(1/(2*lambda^2)-(1-exp(-lambda*time))/(lambda^3*time)+(1-exp(-2*lambda*time))/(4*lambda^3*time))
+
+ res3<--Ctilde*(1/(2*lambda^2)+exp(-lambda*time)/(lambda^2)-time*exp(-2*lambda*time)/(4*lambda)-3*exp(-2*lambda*time)/(4*lambda^2)-2*(1-exp(-lambda*time))/(lambda^3*time)+5*(1-exp(-2*lambda*time))/(8*lambda^3*time))
+
+ res4<--Dtilde*(time/(2*lambda)+exp(-lambda*time)/(lambda^2)-(1-exp(-lambda*time))/(lambda^3*time))
+
+ res5<--Etilde*(3*exp(-lambda*time)/(lambda^2)+time/(2*lambda)+time*exp(-lambda*time)/(lambda)-3*(1-exp(-lambda*time))/(lambda^3*time))
+
+ res6<--Ftilde*(1/(lambda^2)+exp(-lambda*time)/(lambda^2)-exp(-2*lambda*time)/(2*lambda^2)-3*(1-exp(-lambda*time))/(lambda^3*time)+3*(1-exp(-2*lambda*time))/(4*lambda^3*time))
+
+
+ res1+res2+res3+res4+res5+res6
+}
+
+Nelson.Siegel.factor.loadings<-function(lambda=0.07,maturity=1)
+{
+ column1<-rep.int(1,length(maturity))
+ column2<-(1-exp(-lambda*maturity))/(lambda*maturity)
+ column3<-column2-exp(-lambda*maturity)
+
+ lambmat<-cbind(column1,column2,column3)
+
+ lambmat
+}
+
+
+matrix.exponential<-function(mat=1,N=1)
+{
+ size<-length(diag(mat))
+ res1<-diag(size)
+ res2<-res1
+ i<-1
+ while(i<N+1)
+  {
+	res2<-res2%*%(mat/i)
+	res1<-res1+res2
+	i<-i+1
+  }
+ res1
+}
+
+
+
+main.automated.optimization.AFNS.indep.factors<-function(startobs=192,slutobs=192)
+{
+# For obs 192: The reported optimum is 16279.92
+ para<-c(0.08164287,0.2113579,1.232864,0.005093245,0.01101752,0.02642614,0.07102004,-0.02822805,-0.009266408,0.5974706,0.001928631,0.0008237966,0.0004715828,0.0009943158,0.001060231,0.0006220753,0.0002914681,0.0004172058,0.0007039997,0.0004565809,0.0002762221,0.0003697079,0.0008599327,0.003273661,0.0042802,0.002270744)
+
+
+# First step is to read the observed Treasury yields.
+
+  temptreas<-scan(file="C:\\Projekt\\Nelson_Siegel_analysis\\JoE_analysis\\Test_code\\Fama_Bliss_unsmoothed_data_1987_2002.txt",as.list(rep.int(0,17)))
+
+  obstime<-temptreas[[1]]
+  treasobs<-matrix(0,length(obstime),16)
+  i<-1
+  while(i<17)
+   {
+	treasobs[,i]<-0.01*temptreas[[i+1]]
+	i<-i+1
+   }
+
+
+# i<-startobs
+ i<-slutobs
+ while(i>startobs-1)
+# while(i<slutobs+1)
+  {
+# We set up the common path for all the estimation results
+
+	datafilenameroot<-'C:\\Projekt\\Nelson_Siegel_analysis\\JoE_analysis\\Test_code\\Estimation_result\\Estimation_including_obs'
+
+	datafilenameroot<-paste(c(datafilenameroot,i),sep="",collapse="_")
+
+	dir.create(datafilenameroot)
+
+	datafilenameroot<-paste(c(datafilenameroot,"\\"),sep="",collapse="")
+
+	datafilename1<-paste(c(datafilenameroot,"Path_para_est_AFNS_model_full_joint_No1.txt"),sep="",collapse="")
+
+	outputfilename1<-paste(c(datafilenameroot,"Para_estimate_AFNS_model_full_joint_No1.txt"),sep="",collapse="")
+
+
+# First, we perform a full joint estimation
+
+	parares1<-AFDNS.Kalman.filter.optimization.diag.K.diag.sigma.automated(para=para,treasobs=treasobs,obstime=obstime,datafilename=datafilename1,outputfilename=outputfilename1,maxobs=i)
+
+	i<-i-1
+#	i<-i+1
+  }
+
+ parares1
+}
+
+
+
+
+
+######################################
+#####    Affine Nelson-Siegel    #####
+##### Kalman filter optimization #####
+#####  Fuld joint optimization   #####
+#####    Diagonal K and sigma    #####
+######################################
+
+
+AFDNS.Kalman.filter.optimization.diag.K.diag.sigma.automated<-function(para=1,treasobs=1,obstime=1,datafilename=1,outputfilename=1,maxobs=1)
+{
+  paraNo<-length(para)
+
+  controlparapath<-rep.int(0,paraNo+1)
+
+  write(t(controlparapath),file=datafilename,ncolumns=paraNo+1)
+
+
+  m<-optim(para,Diebold.et.al.affine.model.Nelson.Siegel.Kalman.filter.diag.K.diag.sigma.full.joint,control=list(maxit=10000),treasobs=treasobs,obstime=obstime,datafile=datafilename,maxobs=maxobs)
+
+  result1<-c(-m$value,m$par,m$counts,m$convergence)
+
+  write(t(result1),file=outputfilename,ncolumns=1)
+
+ m$par
+}
+
+
+Diebold.et.al.affine.model.Nelson.Siegel.Kalman.filter.diag.K.diag.sigma.full.joint<-function(para=1,treasobs=1,obstime=1,datafile=1,maxobs=1)
+{
+  paraNo<-length(para)
+# We initialize all the parameter values
+
+ kappa11<-para[1]
+ kappa12<-0
+ kappa13<-0
+ kappa21<-0
+ kappa22<-para[2]
+ kappa23<-0
+ kappa31<-0
+ kappa32<-0
+ kappa33<-para[3]
+
+ sigma11<-abs(para[4])
+ sigma21<-0
+ sigma22<-abs(para[5])
+ sigma31<-0
+ sigma32<-0
+ sigma33<-abs(para[6])
+
+ theta1<-para[7]
+ theta2<-para[8]
+ theta3<-para[9]
+
+ lambda<-para[10]
+
+ sigma1<-para[11]^2
+ sigma2<-para[12]^2
+ sigma3<-para[13]^2
+ sigma4<-para[14]^2
+ sigma5<-para[15]^2
+ sigma6<-para[16]^2
+ sigma7<-para[17]^2
+ sigma8<-para[18]^2
+ sigma9<-para[19]^2
+ sigma10<-para[20]^2
+ sigma11ext<-para[21]^2
+ sigma12<-para[22]^2
+ sigma13<-para[23]^2
+ sigma14<-para[24]^2
+ sigma15<-para[25]^2
+ sigma16<-para[26]^2
+
+
+# We impose stationarity under both measures 
+
+ K<--rbind(c(kappa11,kappa12,kappa13),c(kappa21,kappa22,kappa23),c(kappa31,kappa32,kappa33))
+
+ m<-eigen(K,only.values=TRUE)
+ eigenvalues<-m$values
+
+ test<-max(Re(eigenvalues[1]),Re(eigenvalues[2]),Re(eigenvalues[3]))
+
+ if (lambda<0 || test>0) loglike<--70000000
+ else
+  {
+
+  Sigma<-rbind(c(sigma11,0,0),c(sigma21,sigma22,0),c(sigma31,sigma32,sigma33))
+
+# We introduce the relevant maturities and calculated ODE-values.
+ 
+  Maturity<-c(0.25,0.5,0.75,1,1.5,2,3,4,5,7,8,9,10,15,20,30)
+
+ B<-Nelson.Siegel.factor.loadings(lambda=lambda,maturity=Maturity)
+
+ C<-analytical.yield.adjustment.term(sigma11=sigma11,sigma12=0,sigma13=0,sigma21=sigma21,sigma22=sigma22,sigma23=0,sigma31=sigma31,sigma32=sigma32,sigma33=sigma33,lambda=lambda,time=Maturity)
+
+ Hlarge<-diag(c(sigma1,sigma2,sigma3,sigma4,sigma5,sigma6,sigma7,sigma8,sigma9,sigma10,sigma11ext,sigma12,sigma13,sigma14,sigma15,sigma16))
+
+# Before staring the filter we create some vectors to store
+# essential intermediate results.
+
+# totalNo<-length(obstime)
+ totalNo<-maxobs
+ Lstate<-rep.int(0,totalNo+1)
+ Sstate<-rep.int(0,totalNo+1)
+ Cstate<-rep.int(0,totalNo+1)
+
+ loglikevec<-obstime
+ lambmat<-obstime
+ 
+# We start the filter at the unconditional mean and variance.
+# However, for the level factor, which is a unit root process,
+# there is no unconditional mean, instead we start it at the average
+# of the 3-month, 2-year and 10-year yields in the data, which equals
+# 4.682%
+
+ Lstate[1]<-theta1
+ Sstate[1]<-theta2
+ Cstate[1]<-theta3
+
+ state<-c(Lstate[1],Sstate[1],Cstate[1])
+
+ sigmamat<-Sigma
+ 
+ kappamat<-rbind(c(kappa11,kappa12,kappa13),c(kappa21,kappa22,kappa23),c(kappa31,kappa32,kappa33))
+
+# We calculate the conditional and unconditional covariance matrix
+
+ dt<-1/12
+
+# Step 1: diagonalize kappamat
+
+ m<-eigen(kappamat)
+ Eigenvalues<-m$values
+ Eigenvectors<-m$vectors
+
+ InvEigenvectors<-solve(Eigenvectors,diag(3))
+
+# Step 2: Calculate the S-overline matrix
+
+ Smat<-InvEigenvectors%*%sigmamat%*%t(sigmamat)%*%t(InvEigenvectors)
+
+# Step 3: Calculate the V-overline matrix for dt and in the limit
+
+ Vmat<-matrix(0,3,3)
+ Vlim<-matrix(0,3,3)
+ i<-1
+ while(i<4)
+  {
+	j<-1
+	while(j<4)
+	  {
+		Vmat[i,j]<-Smat[i,j]*(1-exp(-(Eigenvalues[i]+Eigenvalues[j])*dt))/(Eigenvalues[i]+Eigenvalues[j])
+		Vlim[i,j]<-Smat[i,j]/(Eigenvalues[i]+Eigenvalues[j])
+		j<-j+1
+	  }
+	i<-i+1
+  }
+
+# Step 4: Calculate the final analytical covariance matrices
+
+ Q<-Re(Eigenvectors%*%Vmat%*%t(Eigenvectors))
+
+ Sigma<-Re(Eigenvectors%*%Vlim%*%t(Eigenvectors))
+
+
+# We calculate the conditional mean
+
+ kappamatdt<--kappamat*dt
+
+ Phi1<-matrix.exponential(mat=kappamatdt,N=100)
+ Phi0<-(diag(3)-Phi1)%*%c(theta1,theta2,theta3)
+
+ FLAG<-0
+ loglike<-0
+
+ i<-1
+ while(i<totalNo+1)
+  {
+
+	xhat<-Phi0+Phi1%*%state
+	Sigmahat<-Phi1%*%Sigma%*%t(Phi1)+Q
+
+# The observed yield and the corresponding maturities in this time step are
+
+	y<-treasobs[i,]
+
+# Next step is to calculate the model-implied yields
+
+	yimplied<-B%*%xhat+C
+
+	H<-Hlarge
+
+	v<-y-yimplied
+	F<-B%*%Sigmahat%*%t(B)+H
+	detF<-det(F)
+	if (is.nan(detF) || is.na(detF) || is.infinite(detF)) 
+	 {
+		loglike<--700000000 
+		FLAG<-1
+	 }
+	else
+	 {
+	   if (detF<0)
+	    {
+		loglike<--700000000 
+		FLAG<-1
+	    }
+	   else
+	    {
+		if (abs(detF)>10^(-150))
+		 {
+			logdetF<-log(detF)
+			Finv<-solve(F,diag(length(y)))
+
+			state<-xhat+Sigmahat%*%t(B)%*%Finv%*%v
+			Sigma<-Sigmahat-Sigmahat%*%t(B)%*%Finv%*%B%*%Sigmahat
+
+			loglikevec[i]<--0.5*(length(y))*log(2*pi)-0.5*logdetF-0.5*t(v)%*%Finv%*%v
+
+#	loglike<-loglike-0.5*(length(y))*log(2*pi)-0.5*logdetF-0.5*t(v)%*%Finv%*%v
+			loglike<-loglike+loglikevec[i]
+                 }  
+		else
+		 {
+			loglike<--700000000 
+			FLAG<-1
+		 }
+	    }
+	  }
+	
+	Lstate[i+1]<-state[1]
+	Sstate[i+1]<-state[2]
+	Cstate[i+1]<-state[3]
+
+	if (FLAG>0) i<-1000
+
+	i<-i+1
+  }
+
+ par(mfrow=c(2,2))
+
+ time<-2000+(obstime-36526)/365
+
+ matplot(time[1:maxobs],cbind(Lstate[2:(length(Lstate))]),type="l",xlab="",ylab="Path of L",lwd=c(1,1),lty=c(1,2),col=c("black"))
+ matplot(time[1:maxobs],cbind(Sstate[2:(length(Sstate))]),type="l",xlab="",ylab="Path of S",lwd=c(1,1),lty=c(1,2),col=c("black"))
+ matplot(time[1:maxobs],cbind(Cstate[2:(length(Cstate))]),type="l",xlab="",ylab="Path of C",lwd=c(1,1),lty=c(1,2),col=c("black"))
+
+
+# The end of parameter restriction if-else-commando
+ }
+
+ simul<-scan(file=datafile,as.list(rep.int(0,paraNo+1)))
+
+ datares<-matrix(0,length(simul[[1]]),paraNo+1)
+
+ i<-1
+ while(i<paraNo+2)
+   {
+     datares[,i]<-simul[[i]]
+     i<-i+1
+   }
+
+ datares<-rbind(datares,c(loglike,para))
+
+ write(t(datares),file=datafile,ncolumns=paraNo+1)
+
+ -(loglike)
+
+}
