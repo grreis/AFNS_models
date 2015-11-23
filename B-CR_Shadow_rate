@@ -1,0 +1,444 @@
+# This program is sourced by
+# source(file="C:\\Projekt\\Zero_lower_boundary\\Shadow_rate_models\\H_15_GSW_1985\\Test_code\\Extended_Kalman_filter_B_CR_shadow_rate_model.r")
+
+###############################
+##### Auxiliary functions #####
+###############################
+
+analytical.yield.adjustment.term<-function(sigma11=0.005,sigma12=0,sigma13=0,sigma21=-0.001,sigma22=0.003,sigma23=0,sigma31=-0.1,sigma32=0.001,sigma33=0.007,lambda=0.6,time=1)
+{
+ Atilde<-sigma11^2+sigma12^2+sigma13^2
+
+ Btilde<-sigma21^2+sigma22^2+sigma23^2
+
+ Ctilde<-sigma31^2+sigma32^2+sigma33^2
+
+ Dtilde<-sigma11*sigma21+sigma12*sigma22+sigma13*sigma23
+
+ Etilde<-sigma11*sigma31+sigma12*sigma32+sigma13*sigma33
+
+ Ftilde<-sigma21*sigma31+sigma22*sigma32+sigma23*sigma33
+
+ res1<--Atilde*time^2/6
+
+ res2<--Btilde*(1/(2*lambda^2)-(1-exp(-lambda*time))/(lambda^3*time)+(1-exp(-2*lambda*time))/(4*lambda^3*time))
+
+ res3<--Ctilde*(1/(2*lambda^2)+exp(-lambda*time)/(lambda^2)-time*exp(-2*lambda*time)/(4*lambda)-3*exp(-2*lambda*time)/(4*lambda^2)-2*(1-exp(-lambda*time))/(lambda^3*time)+5*(1-exp(-2*lambda*time))/(8*lambda^3*time))
+
+ res4<--Dtilde*(time/(2*lambda)+exp(-lambda*time)/(lambda^2)-(1-exp(-lambda*time))/(lambda^3*time))
+
+ res5<--Etilde*(3*exp(-lambda*time)/(lambda^2)+time/(2*lambda)+time*exp(-lambda*time)/(lambda)-3*(1-exp(-lambda*time))/(lambda^3*time))
+
+ res6<--Ftilde*(1/(lambda^2)+exp(-lambda*time)/(lambda^2)-exp(-2*lambda*time)/(2*lambda^2)-3*(1-exp(-lambda*time))/(lambda^3*time)+3*(1-exp(-2*lambda*time))/(4*lambda^3*time))
+
+
+ res1+res2+res3+res4+res5+res6
+}
+
+Nelson.Siegel.factor.loadings<-function(lambda=0.07,maturity=1)
+{
+ column1<-rep.int(1,length(maturity))
+ column2<-(1-exp(-lambda*maturity))/(lambda*maturity)
+ column3<-column2-exp(-lambda*maturity)
+
+ lambmat<-cbind(column1,column2,column3)
+
+ lambmat
+}
+
+
+Nelson.Siegel.forward.yield.factor.loadings<-function(lambda=0.07,maturity=1)
+{
+ column1<-rep.int(1,length(maturity))
+ column2<-exp(-lambda*maturity)
+ column3<-lambda*maturity*exp(-lambda*maturity)
+
+ lambmat<-cbind(column1,column2,column3)
+
+ lambmat
+}
+
+
+
+analytical.forward.yield.adjustment.term<-function(sigma11=0.005,sigma12=0,sigma13=0,sigma21=-0.001,sigma22=0.003,sigma23=0,sigma31=-0.1,sigma32=0.001,sigma33=0.007,lambda=0.6,time=1)
+{
+ Atilde<-sigma11^2+sigma12^2+sigma13^2
+
+ Btilde<-sigma21^2+sigma22^2+sigma23^2
+
+ Ctilde<-sigma31^2+sigma32^2+sigma33^2
+
+ Dtilde<-sigma11*sigma21+sigma12*sigma22+sigma13*sigma23
+
+ Etilde<-sigma11*sigma31+sigma12*sigma32+sigma13*sigma33
+
+ Ftilde<-sigma21*sigma31+sigma22*sigma32+sigma23*sigma33
+
+ res1<--0.5*Atilde*time^2
+
+ res2<--0.5*Btilde*(1/lambda^2-2*exp(-lambda*time)/lambda^2+exp(-2*lambda*time)/lambda^2)
+
+ res3<--0.5*Ctilde*(1/lambda^2+2*exp(-lambda*time)/lambda^2-2*time*exp(-lambda*time)/lambda-3*exp(-2*lambda*time)/(2*lambda^2)+3*time*exp(-2*lambda*time)/lambda-time*exp(-2*lambda*time)/lambda+time^2*exp(-2*lambda*time)-4*exp(-lambda*time)/lambda^2+10*exp(-2*lambda*time)/(4*lambda^2))
+
+ res4<--Dtilde*(time/lambda+exp(-lambda*time)/lambda^2-time*exp(-lambda*time)/lambda-exp(-lambda*time)/lambda^2)
+
+ res5<--Etilde*(3*exp(-lambda*time)/lambda^2-3*time*exp(-lambda*time)/lambda+time/lambda+2*time*exp(-lambda*time)/lambda-time^2*exp(-lambda*time)-3*exp(-lambda*time)/lambda^2)
+
+ res6<--Ftilde*(1/(lambda^2)+exp(-lambda*time)/(lambda^2)-time*exp(-lambda*time)/lambda-exp(-2*lambda*time)/(2*lambda^2)+time*exp(-2*lambda*time)/lambda-3*exp(-lambda*time)/lambda^2+3*exp(-2*lambda*time)/(2*lambda^2))
+
+ res1+res2+res3+res4+res5+res6
+}
+
+
+ZLB.yield.func<-function(Bforward=1,Cforward=1,OmegaT=1,X0=1)
+{
+ ShadowForward<-Bforward%*%X0+Cforward
+
+ ZLBForward<-ShadowForward*pnorm(ShadowForward/OmegaT)+OmegaT*exp(-0.5*(ShadowForward/OmegaT)^2)/sqrt(2*pi)
+
+ y3m<-sum(ZLBForward[1:25])*0.01/0.25
+ y6m<-sum(ZLBForward[1:50])*0.01/0.5
+ y12m<-sum(ZLBForward[1:100])*0.01/1
+ y24m<-sum(ZLBForward[1:200])*0.01/2
+ y36m<-sum(ZLBForward[1:300])*0.01/3
+ y60m<-sum(ZLBForward[1:500])*0.01/5
+ y84m<-sum(ZLBForward[1:700])*0.01/7
+ y120m<-sum(ZLBForward)*0.01/10
+
+ c(y3m,y6m,y12m,y24m,y36m,y60m,y84m,y120m)
+}
+
+
+
+matrix.exponential<-function(mat=1,N=1)
+{
+ size<-length(diag(mat))
+ res1<-diag(size)
+ res2<-res1
+ i<-1
+ while(i<N+1)
+  {
+	res2<-res2%*%(mat/i)
+	res1<-res1+res2
+	i<-i+1
+  }
+ res1
+}
+
+
+Optimization.B.CR.shadow.rate.model<-function(startobs=1557,slutobs=1557)
+{
+
+# For obs 1557: This is the optimal parameter set reported in
+# Table 2 of Christensen and Rudebusch (2015): log likelihood = 71408.9
+
+ para<-c(0.1953309,0.3137761,-0.427096,0.4915498,0.006873626,0.01124824,0.02574968,0.001423751,-0.0251791,0.4699666,0.002994022,0.001437245,0.0001759047,0.0002280629,1.67099e-07,0.0002777839,0.0002758966,0.001026938)
+
+
+# First step is to read the observed Treasury yields.
+
+  temptreas<-scan(file="C:\\Projekt\\Zero_lower_boundary\\Shadow_rate_models\\H_15_GSW_1985\\Test_code\\Treasury_zero_coupon_yields_H15_GSW_weekly_Jan_1985_most_recent.txt",as.list(rep.int(0,9)))
+
+  obstime<-temptreas[[1]]
+  treasobs<-matrix(0,length(obstime),8)
+  i<-1
+  while(i<9)
+   {
+	treasobs[,i]<-0.01*temptreas[[i+1]]
+	i<-i+1
+   }
+
+
+ i<-startobs
+ while(i<slutobs+1)
+  {
+# We set up the common path for all the estimation results
+
+	datafilenameroot<-'C:\\Projekt\\Zero_lower_boundary\\Shadow_rate_models\\H_15_GSW_1985\\Test_code\\Result\\Estimation_including_obs'
+
+	datafilenameroot<-paste(c(datafilenameroot,i),sep="",collapse="_")
+
+	dir.create(datafilenameroot)
+
+	datafilenameroot<-paste(c(datafilenameroot,"\\"),sep="",collapse="")
+
+	outputfilename1<-paste(c(datafilenameroot,"Para_estimate_B_CR_model.txt"),sep="",collapse="")
+
+
+# We perform the model estimation
+
+	parares1<-Extended.Kalman.filter.optimization(para=para,treasobs=treasobs,obstime=obstime,outputfilename=outputfilename1,maxobs=i)
+
+	i<-i+1
+  }
+
+ parares1
+}
+
+
+
+######################################
+##### Kalman filter optimization #####
+######################################
+
+Extended.Kalman.filter.optimization<-function(para=1,treasobs=1,obstime=1,outputfilename=1,maxobs=1)
+{
+
+  m<-optim(para,Extended.Kalman.filter.B.CR.shadow.rate.model,control=list(maxit=10000),treasobs=treasobs,obstime=obstime,maxobs=maxobs)
+
+  result1<-c(-m$value,m$par,m$counts,m$convergence)
+
+  write(t(result1),file=outputfilename,ncolumns=1)
+
+ m$par
+}
+
+
+Extended.Kalman.filter.B.CR.shadow.rate.model<-function(para=1,treasobs=1,obstime=1,maxobs=1)
+{
+# We initialize all the parameter values
+
+ kappa11<-0.0000001
+ kappa12<-0
+ kappa13<-0
+ kappa21<-para[1]
+ kappa22<-para[2]
+ kappa23<-para[3]
+ kappa31<-0
+ kappa32<-0
+ kappa33<-para[4]
+
+ sigma11<-abs(para[5])
+ sigma21<-0
+ sigma22<-abs(para[6])
+ sigma31<-0
+ sigma32<-0
+ sigma33<-abs(para[7])
+
+ theta1<-0
+ theta2<-para[8]
+ theta3<-para[9]
+
+ lambda<-para[10]
+
+ sigma1<-para[11]^2
+ sigma2<-para[12]^2
+ sigma3<-para[13]^2
+ sigma4<-para[14]^2
+ sigma5<-para[15]^2
+ sigma6<-para[16]^2
+ sigma7<-para[17]^2
+ sigma8<-para[18]^2
+
+ MaturityStep<-seq(0.01,10,0.01) 
+
+ OmegaStepSq<-sigma11^2*MaturityStep+sigma22^2*(1-exp(-2*lambda*MaturityStep))/(2*lambda)+sigma33^2*(1-exp(-2*lambda*MaturityStep))/(4*lambda)-0.5*sigma33^2*MaturityStep*exp(-2*lambda*MaturityStep)-0.5*sigma33^2*lambda*MaturityStep^2*exp(-2*lambda*MaturityStep)
+
+# We impose stationarity under both probability measures 
+
+ K<--rbind(c(kappa11,kappa12,kappa13),c(kappa21,kappa22,kappa23),c(kappa31,kappa32,kappa33))
+
+ m<-eigen(K,only.values=TRUE)
+ eigenvalues<-m$values
+
+ test<-max(Re(eigenvalues[1]),Re(eigenvalues[2]),Re(eigenvalues[3]))
+
+ if (lambda<0 || test>0 || min(OmegaStepSq)<0) loglike<--70000000
+ else
+  {
+
+  Sigma<-rbind(c(sigma11,0,0),c(sigma21,sigma22,0),c(sigma31,sigma32,sigma33))
+
+# We introduce the relevant maturities.
+ 
+ Maturity<-c(0.25,0.5,1,2,3,5,7,10)
+
+ Bnom<-Nelson.Siegel.factor.loadings(lambda=lambda,maturity=Maturity)
+
+ Cnom<-analytical.yield.adjustment.term(sigma11=sigma11,sigma12=0,sigma13=0,sigma21=sigma21,sigma22=sigma22,sigma23=0,sigma31=sigma31,sigma32=sigma32,sigma33=sigma33,lambda=lambda,time=Maturity)
+
+
+# We calculate the loadings in the shadow forward rate function
+
+ Bforward<-Nelson.Siegel.forward.yield.factor.loadings(lambda=lambda,maturity=MaturityStep)
+
+ Cforward<-analytical.forward.yield.adjustment.term(sigma11=sigma11,sigma12=0,sigma13=0,sigma21=sigma21,sigma22=sigma22,sigma23=0,sigma31=sigma31,sigma32=sigma32,sigma33=sigma33,lambda=lambda,time=MaturityStep)
+
+ Hlarge<-diag(c(sigma1,sigma2,sigma3,sigma4,sigma5,sigma6,sigma7,sigma8))
+
+# We calculate the omega-function in the option-implied forward rate function
+
+ OmegaStep<-sqrt(OmegaStepSq)
+
+
+# Before staring the filter we create some vectors to store
+# essential intermediate results.
+
+ totalNo<-maxobs
+ Lstate<-rep.int(0,totalNo+1)
+ Sstate<-rep.int(0,totalNo+1)
+ Cstate<-rep.int(0,totalNo+1)
+
+ loglikevec<-obstime
+ lambmat<-obstime
+
+# Since we have imposed a unit root for L,
+# we need to start the Kalman filter in a particular way
+
+ y0<-treasobs[1,]
+
+ y0dif<-y0-rbind(cbind(Cnom))
+
+ BTB<-t(Bnom)%*%Bnom
+
+ BTBinv<-solve(BTB,diag(3))
+
+ X0<-BTBinv%*%t(Bnom)%*%y0dif
+
+ Sigma<-BTBinv%*%t(Bnom)%*%Hlarge%*%Bnom%*%BTBinv
+ 
+ Lstate[1]<-X0[1]
+ Sstate[1]<-X0[2]
+ Cstate[1]<-X0[3]
+
+ state<-c(Lstate[1],Sstate[1],Cstate[1])
+
+ sigmamat<-rbind(c(sigma11,0,0),c(sigma21,sigma22,0),c(sigma31,sigma32,sigma33))
+ 
+ kappamat<-rbind(c(kappa11,kappa12,kappa13),c(kappa21,kappa22,kappa23),c(kappa31,kappa32,kappa33))
+
+
+# We calculate the conditional and unconditional covariance matrix
+
+ dt<-1/52
+
+# Step 1: diagonalize kappamat
+
+ m<-eigen(kappamat)
+ Eigenvalues<-m$values
+ Eigenvectors<-m$vectors
+
+ InvEigenvectors<-solve(Eigenvectors,diag(3))
+
+# Step 2: Calculate the S-overline matrix
+
+ Smat<-InvEigenvectors%*%sigmamat%*%t(sigmamat)%*%t(InvEigenvectors)
+
+# Step 3: Calculate the V-overline matrix for dt and in the limit
+
+ Vmat<-matrix(0,3,3)
+ Vlim<-matrix(0,3,3)
+ i<-1
+ while(i<4)
+  {
+	j<-1
+	while(j<4)
+	  {
+		Vmat[i,j]<-Smat[i,j]*(1-exp(-(Eigenvalues[i]+Eigenvalues[j])*dt))/(Eigenvalues[i]+Eigenvalues[j])
+		Vlim[i,j]<-Smat[i,j]/(Eigenvalues[i]+Eigenvalues[j])
+		j<-j+1
+	  }
+	i<-i+1
+  }
+
+# Step 4: Calculate the final analytical covariance matrices
+
+ Q<-Re(Eigenvectors%*%Vmat%*%t(Eigenvectors))
+
+ kappamatdt<--kappamat*dt
+
+ Phi1<-matrix.exponential(mat=kappamatdt,N=100)
+ Phi0<-(diag(3)-Phi1)%*%c(theta1,theta2,theta3)
+
+
+ FLAG<-0
+ loglike<-0
+
+ dX<-0.00001
+ i<-1
+ while(i<totalNo+1)
+  {
+
+	xhat<-Phi0+Phi1%*%state
+	Sigmahat<-Phi1%*%Sigma%*%t(Phi1)+Q
+
+# The observed yields in this time step are
+
+	y<-treasobs[i,]
+
+# Next step is to calculate the model-implied yields
+
+        yimplied<-ZLB.yield.func(Bforward=Bforward,Cforward=Cforward,OmegaT=OmegaStep,X0=xhat)
+
+# Now, we need the first derivative
+
+	B1<-(ZLB.yield.func(Bforward=Bforward,Cforward=Cforward,OmegaT=OmegaStep,X0=xhat+c(dX,0,0))-yimplied)/dX
+
+	B2<-(ZLB.yield.func(Bforward=Bforward,Cforward=Cforward,OmegaT=OmegaStep,X0=xhat+c(0,dX,0))-yimplied)/dX
+
+	B3<-(ZLB.yield.func(Bforward=Bforward,Cforward=Cforward,OmegaT=OmegaStep,X0=xhat+c(0,0,dX))-yimplied)/dX
+
+	B<-cbind(B1,B2,B3)
+
+	H<-Hlarge
+
+	v<-y-yimplied
+	F<-B%*%Sigmahat%*%t(B)+H
+	detF<-det(F)
+	if (is.nan(detF) || is.na(detF) || is.infinite(detF)) 
+	 {
+		loglike<--700000000 
+		FLAG<-1
+	 }
+	else
+	 {
+	   if (detF<0)
+	    {
+		loglike<--700000000 
+		FLAG<-1
+	    }
+	   else
+	    {
+		if (abs(detF)>10^(-65))
+		 {
+			logdetF<-log(detF)
+			Finv<-solve(F,diag(length(y)))
+
+			state<-xhat+Sigmahat%*%t(B)%*%Finv%*%v
+			Sigma<-Sigmahat-Sigmahat%*%t(B)%*%Finv%*%B%*%Sigmahat
+
+			loglikevec[i]<--0.5*(length(y))*log(2*pi)-0.5*logdetF-0.5*t(v)%*%Finv%*%v
+
+			loglike<-loglike+loglikevec[i]
+                 }  
+		else
+		 {
+			loglike<--700000000 
+			FLAG<-1
+		 }
+	    }
+	  }
+	
+	Lstate[i+1]<-state[1]
+	Sstate[i+1]<-state[2]
+	Cstate[i+1]<-state[3]
+
+	if (FLAG>0) i<-10000
+
+	i<-i+1
+  }
+
+ par(mfrow=c(2,2))
+
+ time<-2000+(obstime-36526)/365
+
+ matplot(time[1:maxobs],cbind(Lstate[2:(length(Lstate))]),type="l",xlab="",xlim=c(1985,2015),ylab="Path of L",lwd=c(1,1),lty=c(1,2),col=c("black"))
+ matplot(time[1:maxobs],cbind(Sstate[2:(length(Sstate))]),type="l",xlab="",xlim=c(1985,2015),ylab="Path of S",lwd=c(1,1),lty=c(1,2),col=c("black"))
+ matplot(time[1:maxobs],cbind(Cstate[2:(length(Cstate))]),type="l",xlab="",xlim=c(1985,2015),ylab="Path of C",lwd=c(1,1),lty=c(1,2),col=c("black"))
+
+# The end of parameter restriction if-else-commando
+ }
+
+ -(loglike)
+
+}
